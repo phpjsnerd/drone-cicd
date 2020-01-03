@@ -1,0 +1,78 @@
+version: "2"
+
+services:
+  gitea-app:
+    image: gitea/gitea:latest
+    container_name: gitea-app
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - ROOT_URL=http://gitea:3000
+      - SSH_DOMAIN=mydomain.com
+    restart: always
+    volumes:
+      - ./volumes/gitea_app:/data
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    networks:
+      - appnet
+
+  gitea-db:
+    image: postgres:alpine
+    container_name: gitea-db
+    ports:
+      - 5440:5432
+    restart: always
+    volumes:
+      - ./volumes/gitea_db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gitea
+    networks:
+      - appnet
+
+  drone-server:
+    image: drone/drone:0.8
+    container_name: drone-server
+    ports:
+      - 80:8000
+      - 9000
+    volumes:
+      - ./volumes/drone:/var/lib/drone/
+    restart: always
+    depends_on:
+      - gitea-app
+    environment:
+      - DRONE_OPEN=true
+      - DRONE_HOST=http://drone-server:8000
+      - DRONE_GITEA=true
+      - DRONE_GITEA_URL=http://gitea:3000
+      - DRONE_SECRET=secret
+      - DRONE_NETWORK=appnet
+    networks:
+      - appnet
+
+  drone-agent:
+    image: drone/agent:0.8
+    container_name: drone-agent
+    command: agent
+    restart: always
+    depends_on:
+      - drone-server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DRONE_SERVER=drone-server:9000
+      - DRONE_SECRET=secret
+    networks:
+      - appnet
+
+volumes:
+  gitea-app:
+  gitea-db:
+
+networks:
+  appnet:
+    external: true
